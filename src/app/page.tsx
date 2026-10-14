@@ -13,6 +13,9 @@ import { CartDrawer } from '@/components/CartDrawer';
 import { QuickViewModal } from '@/components/QuickViewModal';
 import { CheckoutModal } from '@/components/CheckoutModal';
 import { ClinicB2BModal } from '@/components/ClinicB2BModal';
+import { AuthModal } from '@/components/AuthModal';
+import { UserProfileModal } from '@/components/UserProfileModal';
+import { ImageManagerModal } from '@/components/ImageManagerModal';
 import { Toast } from '@/components/Toast';
 
 export default function HomePage() {
@@ -83,6 +86,9 @@ export default function HomePage() {
       <QuickViewModal />
       <CheckoutModal />
       <ClinicB2BModal />
+      <AuthModal />
+      <UserProfileModal />
+      <ImageManagerModal />
       <Toast />
     </div>
   );

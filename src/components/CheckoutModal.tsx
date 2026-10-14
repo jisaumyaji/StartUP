@@ -1,17 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCartStore } from '@/store/cartStore';
+import { useAuth } from '@/context/AuthContext';
+import { saveOrder } from '@/services/userService';
+import { UserOrder } from '@/types/auth';
 import { 
   X, 
-  ShieldCheck, 
   CreditCard, 
   CheckCircle2, 
-  Truck, 
   Leaf, 
   Building2, 
   Lock,
-  ArrowRight
+  ArrowRight,
+  Package,
+  Sparkles,
+  UserCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -26,7 +30,10 @@ export const CheckoutModal: React.FC = () => {
   const getGrandTotal = useCartStore((state) => state.getGrandTotal);
   const clearCart = useCartStore((state) => state.clearCart);
 
+  const { user, profile, openAuthModal, openProfileModal, refreshOrders } = useAuth();
+
   const [step, setStep] = useState<'form' | 'confirmed'>('form');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClinic, setIsClinic] = useState(false);
   const [formData, setFormData] = useState({
     name: 'Dr. Jane Miller',
@@ -41,6 +48,24 @@ export const CheckoutModal: React.FC = () => {
   });
   const [confirmedOrderId, setConfirmedOrderId] = useState('');
 
+  // Auto-fill from Supabase Profile if user is logged in
+  useEffect(() => {
+    if (profile) {
+      setFormData((prev) => ({
+        ...prev,
+        name: profile.fullName || prev.name,
+        email: profile.email || prev.email,
+        clinicName: profile.clinicName || prev.clinicName,
+        address: profile.address || prev.address,
+        city: profile.city || prev.city,
+        postalCode: profile.postalCode || prev.postalCode,
+      }));
+      if (profile.role === 'clinic') {
+        setIsClinic(true);
+      }
+    }
+  }, [profile]);
+
   if (!isCheckoutOpen) return null;
 
   const subtotal = getSubtotal();
@@ -49,11 +74,49 @@ export const CheckoutModal: React.FC = () => {
   const tax = getTaxAmount();
   const grandTotal = getGrandTotal();
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+
     const orderId = `ECO-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const orderRecord: UserOrder = {
+      id: orderId,
+      userId: user ? user.id : null,
+      customer: {
+        fullName: formData.name,
+        email: formData.email,
+        phone: profile?.phone || '',
+        address: formData.address,
+        city: formData.city,
+        postalCode: formData.postalCode,
+        isClinicOrder: isClinic,
+        clinicName: isClinic ? formData.clinicName : undefined,
+      },
+      items: items.map((item) => ({
+        productId: item.product.id,
+        title: item.product.title,
+        variantName: item.selectedVariant.name,
+        price: item.selectedVariant.price,
+        quantity: item.quantity,
+        image: item.product.image,
+      })),
+      subtotal,
+      discount,
+      shipping,
+      tax,
+      total: grandTotal,
+      status: 'confirmed',
+      createdAt: new Date().toISOString(),
+    };
+
+    // Save order to Supabase orders table
+    await saveOrder(orderRecord);
+    await refreshOrders();
+
     setConfirmedOrderId(orderId);
     setStep('confirmed');
+    setIsSubmitting(false);
 
     // Confetti celebration
     try {
@@ -87,7 +150,7 @@ export const CheckoutModal: React.FC = () => {
           
           <button
             onClick={handleClose}
-            className="absolute top-5 right-5 p-2 rounded-full text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
+            className="absolute top-5 right-5 p-2 rounded-full text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" />
@@ -95,18 +158,35 @@ export const CheckoutModal: React.FC = () => {
 
           {step === 'form' ? (
             <div>
-              <div className="flex items-center gap-2.5 mb-6">
-                <div className="w-9 h-9 rounded-full bg-zinc-950 text-white flex items-center justify-center">
-                  <Lock className="w-4 h-4 text-emerald-400" />
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full bg-zinc-950 text-white flex items-center justify-center">
+                    <Lock className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-zinc-950 uppercase tracking-tight">
+                      SECURE ECO CHECKOUT
+                    </h2>
+                    <p className="text-xs text-zinc-500">
+                      Supabase Verified • 256-Bit SSL • Carbon-Neutral Dispatch
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-lg font-black text-zinc-950 uppercase tracking-tight">
-                    SECURE ECO CHECKOUT
-                  </h2>
-                  <p className="text-xs text-zinc-500">
-                    256-Bit SSL Encrypted • Carbon-Neutral Dispatch
-                  </p>
-                </div>
+
+                {user ? (
+                  <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Autofilled from Profile</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openAuthModal('signin')}
+                    className="text-[11px] font-bold text-emerald-800 hover:underline cursor-pointer"
+                  >
+                    Have an account? Sign In
+                  </button>
+                )}
               </div>
 
               <form onSubmit={handlePlaceOrder} className="space-y-5">
@@ -140,7 +220,7 @@ export const CheckoutModal: React.FC = () => {
                         required
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950"
+                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-zinc-50 focus:bg-white"
                       />
                     </div>
                     <div>
@@ -150,7 +230,7 @@ export const CheckoutModal: React.FC = () => {
                         required
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950"
+                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-zinc-50 focus:bg-white"
                       />
                     </div>
                   </div>
@@ -162,7 +242,7 @@ export const CheckoutModal: React.FC = () => {
                         type="text"
                         value={formData.clinicName}
                         onChange={(e) => setFormData({ ...formData, clinicName: e.target.value })}
-                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950"
+                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-zinc-50 focus:bg-white"
                       />
                     </div>
                   )}
@@ -174,7 +254,7 @@ export const CheckoutModal: React.FC = () => {
                       required
                       value={formData.address}
                       onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950"
+                      className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-zinc-50 focus:bg-white"
                     />
                   </div>
 
@@ -186,7 +266,7 @@ export const CheckoutModal: React.FC = () => {
                         required
                         value={formData.city}
                         onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950"
+                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-zinc-50 focus:bg-white"
                       />
                     </div>
                     <div>
@@ -196,7 +276,7 @@ export const CheckoutModal: React.FC = () => {
                         required
                         value={formData.postalCode}
                         onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950"
+                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-zinc-50 focus:bg-white"
                       />
                     </div>
                   </div>
@@ -267,10 +347,17 @@ export const CheckoutModal: React.FC = () => {
                     </div>
                     <button
                       type="submit"
+                      disabled={isSubmitting}
                       className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs uppercase tracking-wider px-6 py-3 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
                     >
-                      <span>PLACE ORDER</span>
-                      <ArrowRight className="w-4 h-4" />
+                      {isSubmitting ? (
+                        <span className="inline-block w-4 h-4 border-2 border-zinc-950/30 border-t-zinc-950 rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <span>PLACE ORDER</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -286,13 +373,13 @@ export const CheckoutModal: React.FC = () => {
 
               <div>
                 <span className="text-xs font-bold text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                  ORDER PLACED SUCCESSFULLY
+                  ORDER STORED IN SUPABASE
                 </span>
                 <h2 className="text-2xl font-black text-zinc-950 mt-3">
-                  Thank You for Choosing Eco-Friendly!
+                  Thank You for Choosing EcoLuxe!
                 </h2>
                 <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
-                  Your order reference is <strong className="text-zinc-900 font-mono">{confirmedOrderId}</strong>. A confirmation email and tracking link have been sent to <strong>{formData.email}</strong>.
+                  Your order reference is <strong className="text-zinc-900 font-mono">{confirmedOrderId}</strong>. A confirmation email and tracking link have been saved to Supabase for <strong>{formData.email}</strong>.
                 </p>
               </div>
 
@@ -309,10 +396,21 @@ export const CheckoutModal: React.FC = () => {
                 </ul>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleClose();
+                    openProfileModal();
+                  }}
+                  className="w-full sm:w-auto bg-emerald-900 text-white font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-full hover:bg-emerald-950 transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Package className="w-4 h-4" />
+                  <span>View in My Orders</span>
+                </button>
                 <button
                   onClick={handleClose}
-                  className="bg-zinc-950 text-white font-bold text-xs uppercase tracking-wider px-8 py-3.5 rounded-full hover:bg-zinc-800 transition-colors shadow-md"
+                  className="w-full sm:w-auto bg-zinc-100 text-zinc-800 font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-full hover:bg-zinc-200 transition-colors cursor-pointer"
                 >
                   Continue Shopping
                 </button>

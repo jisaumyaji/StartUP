@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+import { Providers } from '@/components/Providers';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -20,7 +21,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: 'EcoLuxe | Eco-Friendly Sanitary Pads, Bamboo Tissues & Medical Gloves',
   description:
-    'Certified sustainable personal hygiene & medical supplies. Organic bamboo sanitary pads, unbleached tissue papers, and biodegradable surgical & doctor examination gloves.',
+    'Certified sustainable personal hygiene & medical supplies. Organic bamboo sanitary pads, unbleached tissue papers, and biodegradable surgical & doctor examination gloves. Powered by Supabase.',
   keywords: [
     'sanitary pads',
     'bamboo tissues',
@@ -42,7 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} scroll-smooth`}>
       <body className="min-h-screen flex flex-col bg-white text-zinc-950 font-sans antialiased selection:bg-emerald-200 selection:text-emerald-950">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
